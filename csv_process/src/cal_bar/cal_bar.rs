@@ -18,42 +18,42 @@ impl OhlcRecord {
     }
 
     // 更新OHLC记录
-    fn update(&mut self, time: i64, bid: f64, ask: f64) {
+    fn update(&mut self, bid: f64, ask: f64) {
         // 更新现有OHLC记录
-        self.2 = bid;
         self.3 = self.3.max(bid);
         self.4 = self.4.min(bid);
         self.5 = bid;
         self.7 = self.7.max(ask);
         self.8 = self.8.min(ask);
         self.9 = ask;
-        self.11 = self.11.max(ask);
-        self.12 = self.12.min(ask);
-        self.13 = (ask + bid) / 2.0;
+        let mid = (ask + bid) / 2.0;
+        self.11 = self.11.max(mid);
+        self.12 = self.12.min(mid);
+        self.13 = mid;
     }
 }
 
 
 fn cal_bar2(path: &str, frame: i64) -> Result<(), Box<dyn Error>> {
     let dist_csv = format!("{}/{}N.csv", Path::new(path).parent().unwrap().to_str().unwrap(), frame / 60000);
-    let mut reader = csv::Reader::from_path(path)?;
-    let mut writer = csv::Writer::from_path(dist_csv)?;
+    let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(path)?;
+    let mut writer = csv::WriterBuilder::new().has_headers(false).from_path(dist_csv)?;
     let first_row = reader.records().next().unwrap()?;
     let tick_time = first_row[0].parse()?;
+
     let mut ohlc_record: OhlcRecord = {
         let tick_time: i64 = tick_time;
         let first_bid: f64 = first_row[1].parse()?;
         let first_ask: f64 = first_row[2].parse()?;
         OhlcRecord::new(tick_time, frame, first_bid, first_ask)
     };
-    let mut last_tick = tick_time % frame;
     for row in reader.records() {
         let row = row?;
         let time_stamp: i64 = row[0].parse()?;
         let bid: f64 = row[1].parse()?;
         let ask: f64 = row[2].parse()?;
-        if tick_time % frame > last_tick {
-            ohlc_record.update(time_stamp, bid, ask);
+        if time_stamp >= ohlc_record.0 && time_stamp < ohlc_record.1 {
+            ohlc_record.update(bid, ask);
         } else {
             write_row(&mut writer, ohlc_record).unwrap();
             ohlc_record = OhlcRecord::new(time_stamp, frame, bid, ask);
@@ -68,8 +68,8 @@ fn cal_bar2(path: &str, frame: i64) -> Result<(), Box<dyn Error>> {
 
 fn write_row(writer: &mut Writer<File>, ohlc_record: OhlcRecord) -> Result<(), Box<dyn Error>> {
     writer.write_record(vec![
-        format!("{:.5}", ohlc_record.0),
-        format!("{:.5}", ohlc_record.1),
+        format!("{:.0}", ohlc_record.0),
+        format!("{:.0}", ohlc_record.1),
         format!("{:.5}", ohlc_record.2),
         format!("{:.5}", ohlc_record.3),
         format!("{:.5}", ohlc_record.4),
@@ -86,16 +86,10 @@ fn write_row(writer: &mut Writer<File>, ohlc_record: OhlcRecord) -> Result<(), B
     Ok(())
 }
 
-fn main() {
-    match cal_bar2("your_input_path.csv", 60 * 1000) {
-        Ok(()) => println!("Success"),
-        Err(e) => println!("Error: {}", e),
-    }
-}
 
 #[test]
 fn test01() {
-    let path = r"D:\DownLoad\BaiduNetdiskDownload\HISTDATA_COM_ASCII_EURUSD_T202008 (2)\tick\202311.csv";
+    let path = r"D:\tick\EURUSD\dist\200005.csv";
     cal_bar2(&path, 60000).unwrap();
 }
 
