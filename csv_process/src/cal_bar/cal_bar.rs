@@ -1,46 +1,101 @@
-//
-//
-// fn cal_bar_by_csv() -> Result<()> {
-//     // 从CSV文件中读取数据
-//     let df = CsvReader::from_path("your_data_file.csv")?
-//         .has_header(false)
-//         .finish()?;
-//
-//     // 将时间戳列转换为DateTime类型
-//     let df = df.with_column(
-//         df.column(0)
-//             .cast(DataType::Date64)
-//             .unwrap()
-//             .alias("timestamp"),
-//     );
-//
-//     // 对数据进行重新采样，计算1分钟、5分钟、15分钟的OHLC
-//     let ohlc_1min = resample_ohlc(&df, "1T");
-//     let ohlc_5min = resample_ohlc(&df, "5T");
-//     let ohlc_15min = resample_ohlc(&df, "15T");
-//
-//     // 打印结果
-//     println!("1-Minute OHLC:\n{:?}", ohlc_1min);
-//     println!("5-Minute OHLC:\n{:?}", ohlc_5min);
-//     println!("15-Minute OHLC:\n{:?}", ohlc_15min);
-//
-//     Ok(())
-// }
-//
-// // 辅助函数：重新采样并计算OHLC
-// fn resample_ohlc(df: &DataFrame, freq: &str) -> Result<DataFrame> {
-//     df.resample(freq, Some(agg_list().agg_first()))?
-//         .agg(agg_list().agg_max())
-//         .agg(agg_list().agg_min())
-//         .agg(agg_list().agg_last())
-// }
-//
-// // 辅助函数：创建聚合函数列表
-// fn agg_list() -> AggList {
-//     let mut agg_list = AggList::new();
-//     agg_list.add("open", |s| Ok(s.first().unwrap().unwrap()));
-//     agg_list.add("high", |s| Ok(s.max().unwrap().unwrap()));
-//     agg_list.add("low", |s| Ok(s.min().unwrap().unwrap()));
-//     agg_list.add("close", |s| Ok(s.last().unwrap().unwrap()));
-//     agg_list
-// }
+use std::error::Error;
+use std::fs::File;
+use std::io::{self, Read, Write};
+use std::path::Path;
+use csv::Writer;
+
+// 定义元组结构体表示OHLC数据
+
+#[derive(Clone, Copy)]
+struct OhlcRecord(i64, i64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64);
+
+impl OhlcRecord {
+    // 创建一个新的OHLC记录
+    fn new(time: i64, duration: i64, bid: f64, ask: f64) -> Self {
+        let mid = (bid + ask) / 2.0;
+        let start_time = time / duration * duration;
+        OhlcRecord(start_time, start_time + duration, bid, bid, bid, bid, ask, ask, ask, ask, mid, mid, mid, mid)
+    }
+
+    // 更新OHLC记录
+    fn update(&mut self, time: i64, bid: f64, ask: f64) {
+        // 更新现有OHLC记录
+        self.2 = bid;
+        self.3 = self.3.max(bid);
+        self.4 = self.4.min(bid);
+        self.5 = bid;
+        self.7 = self.7.max(ask);
+        self.8 = self.8.min(ask);
+        self.9 = ask;
+        self.11 = self.11.max(ask);
+        self.12 = self.12.min(ask);
+        self.13 = (ask + bid) / 2.0;
+    }
+}
+
+
+fn cal_bar2(path: &str, frame: i64) -> Result<(), Box<dyn Error>> {
+    let dist_csv = format!("{}/{}N.csv", Path::new(path).parent().unwrap().to_str().unwrap(), frame / 60000);
+    let mut reader = csv::Reader::from_path(path)?;
+    let mut writer = csv::Writer::from_path(dist_csv)?;
+    let first_row = reader.records().next().unwrap()?;
+    let tick_time = first_row[0].parse()?;
+    let mut ohlc_record: OhlcRecord = {
+        let tick_time: i64 = tick_time;
+        let first_bid: f64 = first_row[1].parse()?;
+        let first_ask: f64 = first_row[2].parse()?;
+        OhlcRecord::new(tick_time, frame, first_bid, first_ask)
+    };
+    let mut last_tick = tick_time % frame;
+    for row in reader.records() {
+        let row = row?;
+        let time_stamp: i64 = row[0].parse()?;
+        let bid: f64 = row[1].parse()?;
+        let ask: f64 = row[2].parse()?;
+        if tick_time % frame > last_tick {
+            ohlc_record.update(time_stamp, bid, ask);
+        } else {
+            write_row(&mut writer, ohlc_record).unwrap();
+            ohlc_record = OhlcRecord::new(time_stamp, frame, bid, ask);
+        }
+    }
+    // 写入最后一条OHLC记录
+    write_row(&mut writer, ohlc_record)?;
+
+    println!("执行完成");
+    Ok(())
+}
+
+fn write_row(writer: &mut Writer<File>, ohlc_record: OhlcRecord) -> Result<(), Box<dyn Error>> {
+    writer.write_record(vec![
+        format!("{:.5}", ohlc_record.0),
+        format!("{:.5}", ohlc_record.1),
+        format!("{:.5}", ohlc_record.2),
+        format!("{:.5}", ohlc_record.3),
+        format!("{:.5}", ohlc_record.4),
+        format!("{:.5}", ohlc_record.5),
+        format!("{:.5}", ohlc_record.6),
+        format!("{:.5}", ohlc_record.7),
+        format!("{:.5}", ohlc_record.8),
+        format!("{:.5}", ohlc_record.9),
+        format!("{:.5}", ohlc_record.10),
+        format!("{:.5}", ohlc_record.11),
+        format!("{:.5}", ohlc_record.12),
+        format!("{:.5}", ohlc_record.13),
+    ].into_iter())?;
+    Ok(())
+}
+
+fn main() {
+    match cal_bar2("your_input_path.csv", 60 * 1000) {
+        Ok(()) => println!("Success"),
+        Err(e) => println!("Error: {}", e),
+    }
+}
+
+#[test]
+fn test01() {
+    let path = r"D:\DownLoad\BaiduNetdiskDownload\HISTDATA_COM_ASCII_EURUSD_T202008 (2)\tick\202311.csv";
+    cal_bar2(&path, 60000).unwrap();
+}
+
