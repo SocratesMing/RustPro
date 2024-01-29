@@ -19,12 +19,11 @@ pub fn contact_csv(path: &str, csv_name: &str) -> Result<(), Box<dyn Error>> {
         .collect();
 
     // tx.send(format!("存储到文件 {:?}", dist_csv)).unwrap();
-    println!("存储到文件 {:?}", csv_file);
+    println!("存储到文件 {:?}", PathBuf::from(path).join(csv_file));
     Ok(())
 }
 
 fn contact(src_path: &PathBuf, dist_name: &str) -> Result<(), Box<dyn Error>> {
-
     let parent_path = src_path.parent().unwrap();
     let dist_csv = parent_path.join(dist_name);
 

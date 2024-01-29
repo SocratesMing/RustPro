@@ -25,8 +25,8 @@ pub fn find_csv_threading(path: &str, offset: u8) -> Result<(), io::Error> {
         .into_iter()
         .map(|entry| {
             // let tx = tx.clone();
-            println!("entry = {:?}", &entry.path());
-            println!("dist_path = {:?}", &dist_path);
+            // println!("entry = {:?}", &entry.path());
+            // println!("dist_path = {:?}", &dist_path);
             let dist_path = dist_path.clone();
             thread::spawn(move || {
                 if let Err(e) = process_csv_thead(&entry.path(), &dist_path, offset) {

@@ -1,13 +1,13 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, Read, Write};
 use std::path::Path;
+
 use csv::Writer;
 
 // 定义元组结构体表示OHLC数据
 
 #[derive(Clone, Copy)]
-struct OhlcRecord(i64, i64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64);
+pub struct OhlcRecord(i64, i64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64);
 
 impl OhlcRecord {
     // 创建一个新的OHLC记录
@@ -34,10 +34,10 @@ impl OhlcRecord {
 }
 
 
-fn cal_bar2(path: &str, frame: i64) -> Result<(), Box<dyn Error>> {
-    let dist_csv = format!("{}/{}N.csv", Path::new(path).parent().unwrap().to_str().unwrap(), frame / 60000);
+pub fn calculate_bar(path: &str, frame: i64) -> Result<(), Box<dyn Error>> {
+    let dist_csv = format!("{}\\{}N.csv", Path::new(path).parent().unwrap().to_str().unwrap(), frame / 60000);
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(path)?;
-    let mut writer = csv::WriterBuilder::new().has_headers(false).from_path(dist_csv)?;
+    let mut writer = csv::WriterBuilder::new().has_headers(false).from_path(&dist_csv)?;
     let first_row = reader.records().next().unwrap()?;
     let tick_time = first_row[0].parse()?;
 
@@ -62,7 +62,7 @@ fn cal_bar2(path: &str, frame: i64) -> Result<(), Box<dyn Error>> {
     // 写入最后一条OHLC记录
     write_row(&mut writer, ohlc_record)?;
 
-    println!("执行完成");
+    println!("执行完成 {}", dist_csv);
     Ok(())
 }
 
@@ -90,6 +90,6 @@ fn write_row(writer: &mut Writer<File>, ohlc_record: OhlcRecord) -> Result<(), B
 #[test]
 fn test01() {
     let path = r"D:\tick\EURUSD\dist\200005.csv";
-    cal_bar2(&path, 60000).unwrap();
+    calculate_bar(&path, 60000).unwrap();
 }
 
